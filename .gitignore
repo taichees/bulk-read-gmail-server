@@ -1,0 +1,19 @@
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Cloudflare Workers / Wrangler
+.wrangler/
+dist/
+.dev.vars
+
+# Environment variables (if any)
+.env
+.env.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# TypeScript cache
+*.tsbuildinfo

@@ -1,0 +1,12 @@
+name = "gmail-batch-read"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+GOOGLE_CLIENT_ID = "725405052696-binf7nh361nd97rt21ilpsd3v7b7q5jd.apps.googleusercontent.com"
+SUPABASE_URL = "https://mvjpofxktclxmeovqeqa.supabase.co"
+
+# 以下のシークレットは `wrangler secret put` で設定してください
+# GOOGLE_CLIENT_SECRET = "..."
+# SUPABASE_SERVICE_ROLE_KEY = "..."
+# ENCRYPTION_KEY = "32文字以上のランダムな文字列"

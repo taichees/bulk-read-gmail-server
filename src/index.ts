@@ -12,10 +12,29 @@ const getSupabase = (env: Bindings) => createClient(env.SUPABASE_URL, env.SUPABA
  * ② OAuth認証・コールバック
  */
 app.post('/v1/auth/callback', async (c) => {
-  const { code, user_id } = await c.req.json();
+  let body;
+  try {
+    body = await c.req.json();
+  } catch (e) {
+    return c.json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const { code, user_id } = body;
   const env = c.env;
 
+  // 環境変数の検証
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.ENCRYPTION_KEY) {
+    console.error('Missing environment variables:', {
+      GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET: !!env.GOOGLE_CLIENT_SECRET,
+      ENCRYPTION_KEY: !!env.ENCRYPTION_KEY
+    });
+    return c.json({ error: 'Server configuration error' }, 500);
+  }
+
   // Google Token APIにリクエスト
+  const redirectUri = env.REDIRECT_URI || 'http://localhost:5173';
+
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -24,14 +43,19 @@ app.post('/v1/auth/callback', async (c) => {
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
       grant_type: 'authorization_code',
-      redirect_uri: 'postmessage', // フロントエンドの実装に合わせる
+      redirect_uri: redirectUri,
     }),
   });
 
-  const tokens = await tokenRes.json() as any;
+  const tokens: any = await tokenRes.json();
+
   if (!tokenRes.ok) {
-    console.error('Google Auth Error:', tokens);
-    return c.json({ error: tokens.error_description || tokens.error || 'Failed to fetch tokens' }, 400);
+    console.error('Google Auth Error:', {
+      status: tokenRes.status,
+      details: tokens
+    });
+    // Googleからのエラー内容を詳細に返すように変更
+    return c.json({ error: 'Google Auth Failed', google_error: tokens }, 400);
   }
 
   // refresh_tokenの暗号化
@@ -53,7 +77,14 @@ app.post('/v1/auth/callback', async (c) => {
  * ③ 一括既読処理API
  */
 app.post('/v1/gmail/read-all', async (c) => {
-  const { user_id, limit } = await c.req.json();
+  let body;
+  try {
+    body = await c.req.json();
+  } catch (e) {
+    return c.json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const { user_id, limit } = body;
   const env = c.env;
   const supabase = getSupabase(env);
 
@@ -97,9 +128,15 @@ app.post('/v1/gmail/read-all', async (c) => {
     });
     if (pageToken) listParams.append('pageToken', pageToken);
 
-    const listRes = await fetch(`https://gmail.googleapis.com/v1/users/me/messages?${listParams.toString()}`, {
+    const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+
+    if (!listRes.ok) {
+      const errorText = await listRes.text();
+      console.error('Gmail List API Error:', { status: listRes.status, body: errorText });
+      return c.json({ error: 'Failed to fetch messages from Gmail', details: errorText }, listRes.status);
+    }
 
     const listData: any = await listRes.json();
     if (listData.messages) {
@@ -123,7 +160,7 @@ app.post('/v1/gmail/read-all', async (c) => {
   const chunkSize = 1000;
   for (let i = 0; i < allMessageIds.length; i += chunkSize) {
     const chunk = allMessageIds.slice(i, i + chunkSize);
-    await fetch('https://gmail.googleapis.com/v1/users/me/messages/batchModify', {
+    const batchRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -134,6 +171,11 @@ app.post('/v1/gmail/read-all', async (c) => {
         removeLabelIds: ['UNREAD'],
       }),
     });
+
+    if (!batchRes.ok) {
+      const errorText = await batchRes.text();
+      console.error('Gmail BatchModify Error:', errorText);
+    }
   }
 
   return c.json({

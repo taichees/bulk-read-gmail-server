@@ -5,6 +5,7 @@ compatibility_date = "2024-01-01"
 [vars]
 GOOGLE_CLIENT_ID = "725405052696-binf7nh361nd97rt21ilpsd3v7b7q5jd.apps.googleusercontent.com"
 SUPABASE_URL = "https://mvjpofxktclxmeovqeqa.supabase.co"
+REDIRECT_URI = "https://gmail-batch-read.chiaki-621.workers.dev/"
 
 # 以下のシークレットは `wrangler secret put` で設定してください
 # GOOGLE_CLIENT_SECRET = "..."

@@ -1,0 +1,40 @@
+### 変数定義 (ローカル環境)
+#@baseUrl = http://localhost:8787
+@baseUrl = https://gmail-batch-read.chiaki-621.workers.dev
+@userId = your-test-user-id
+
+@code = 4/0AdkVLPyR0Jx_s46ecanOhYkyS04uUO9YLllpVybNShg3YX7-thK_H0owwsWF32tZH1BhuQ
+### 1. OAuth認証コールバック (初回登録・トークン保存)
+# ※ code は Google の認証画面から取得した認可コードに置き換えてください
+POST {{baseUrl}}/v1/auth/callback
+Content-Type: application/json
+
+{
+  "code": "{{code}}",
+  "user_id": "{{userId}}"
+}
+
+### 2. Gmail 一括既読処理 (件数制限あり - 無料版)
+POST {{baseUrl}}/v1/gmail/read-all
+Content-Type: application/json
+
+{
+  "user_id": "{{userId}}",
+  "limit": 50
+}
+
+### 3. Gmail 一括既読処理 (全件既読 - 有料版)
+POST {{baseUrl}}/v1/gmail/read-all
+Content-Type: application/json
+
+{
+  "user_id": "{{userId}}"
+}
+
+### 4. アカウント初期化 (ログアウト)
+POST {{baseUrl}}/v1/auth/logout
+Content-Type: application/json
+
+{
+  "user_id": "{{userId}}"
+}

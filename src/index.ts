@@ -6,7 +6,8 @@ import { Bindings } from './types';
 const app = new Hono<{ Bindings: Bindings }>();
 
 // Supabaseクライアント初期化
-const getSupabase = (env: Bindings) => createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+const getSupabase = (env: Bindings) =>
+  createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
 /**
  * ② OAuth認証・コールバック
@@ -27,7 +28,7 @@ app.post('/v1/auth/callback', async (c) => {
     console.error('Missing environment variables:', {
       GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: !!env.GOOGLE_CLIENT_SECRET,
-      ENCRYPTION_KEY: !!env.ENCRYPTION_KEY
+      ENCRYPTION_KEY: !!env.ENCRYPTION_KEY,
     });
     return c.json({ error: 'Server configuration error' }, 500);
   }
@@ -52,7 +53,7 @@ app.post('/v1/auth/callback', async (c) => {
   if (!tokenRes.ok) {
     console.error('Google Auth Error:', {
       status: tokenRes.status,
-      details: tokens
+      details: tokens,
     });
     // Googleからのエラー内容を詳細に返すように変更
     return c.json({ error: 'Google Auth Failed', google_error: tokens }, 400);
@@ -62,12 +63,14 @@ app.post('/v1/auth/callback', async (c) => {
   const encryptedRT = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
 
   // DB保存
-  const { error } = await getSupabase(env).from('user_tokens').upsert({
-    user_id,
-    access_token: tokens.access_token,
-    refresh_token: encryptedRT,
-    expiry_date: Date.now() + tokens.expires_in * 1000,
-  });
+  const { error } = await getSupabase(env)
+    .from('user_tokens')
+    .upsert({
+      user_id,
+      access_token: tokens.access_token,
+      refresh_token: encryptedRT,
+      expiry_date: Date.now() + tokens.expires_in * 1000,
+    });
 
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });
@@ -128,14 +131,20 @@ app.post('/v1/gmail/read-all', async (c) => {
     });
     if (pageToken) listParams.append('pageToken', pageToken);
 
-    const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
 
     if (!listRes.ok) {
       const errorText = await listRes.text();
       console.error('Gmail List API Error:', { status: listRes.status, body: errorText });
-      return c.json({ error: 'Failed to fetch messages from Gmail', details: errorText }, listRes.status);
+      return c.json(
+        { error: 'Failed to fetch messages from Gmail', details: errorText },
+        listRes.status
+      );
     }
 
     const listData: any = await listRes.json();
@@ -160,17 +169,20 @@ app.post('/v1/gmail/read-all', async (c) => {
   const chunkSize = 1000;
   for (let i = 0; i < allMessageIds.length; i += chunkSize) {
     const chunk = allMessageIds.slice(i, i + chunkSize);
-    const batchRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ids: chunk,
-        removeLabelIds: ['UNREAD'],
-      }),
-    });
+    const batchRes = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ids: chunk,
+          removeLabelIds: ['UNREAD'],
+        }),
+      }
+    );
 
     if (!batchRes.ok) {
       const errorText = await batchRes.text();
@@ -191,10 +203,7 @@ app.post('/v1/auth/logout', async (c) => {
   const { user_id } = await c.req.json();
   const supabase = getSupabase(c.env);
 
-  const { error } = await supabase
-    .from('user_tokens')
-    .delete()
-    .eq('user_id', user_id);
+  const { error } = await supabase.from('user_tokens').delete().eq('user_id', user_id);
 
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });

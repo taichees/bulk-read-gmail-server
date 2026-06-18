@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import { createClient } from '@supabase/supabase-js';
 import { encrypt, decrypt } from './crypto';
 import { Bindings } from './types';
@@ -70,7 +71,9 @@ app.post('/v1/auth/callback', async (c) => {
   if (tokens.refresh_token) {
     upsertData.refresh_token = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
   } else {
-    console.log(`No new refresh_token provided for user ${user_id}. Keeping existing one if it exists.`);
+    console.log(
+      `No new refresh_token provided for user ${user_id}. Keeping existing one if it exists.`
+    );
   }
 
   // DB保存
@@ -174,7 +177,7 @@ app.post('/v1/gmail/read-all', async (c) => {
     return c.json({
       success: true,
       processed_count: 0,
-      message: 'No unread messages'
+      message: 'No unread messages',
     });
   }
 
@@ -220,6 +223,125 @@ app.post('/v1/auth/logout', async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });
+});
+
+/**
+ * ⑤ プライバシーポリシー（Google審査用）
+ */
+app.get('/privacy', (c) => {
+  return c.html(
+    html`<!DOCTYPE html>
+      <html lang="ja">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>プライバシーポリシー - Gmail一括既読アプリ</title>
+          <style>
+            body {
+              font-family:
+                -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+                sans-serif;
+              line-height: 1.6;
+              max-width: 800px;
+              margin: 40px auto;
+              padding: 0 20px;
+              color: #333;
+              background-color: #f4f7f9;
+            }
+            .container {
+              background: #fff;
+              padding: 40px;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            }
+            h1 {
+              color: #222;
+              border-bottom: 2px solid #eee;
+              padding-bottom: 10px;
+              font-size: 1.8em;
+            }
+            h2 {
+              color: #444;
+              margin-top: 30px;
+              font-size: 1.4em;
+            }
+            p,
+            li {
+              margin-bottom: 15px;
+            }
+            ul {
+              padding-left: 20px;
+            }
+            .footer {
+              margin-top: 50px;
+              font-size: 0.9em;
+              color: #777;
+              border-top: 1px solid #eee;
+              padding-top: 20px;
+            }
+            .contact-box {
+              background: #f0f4f8;
+              padding: 15px;
+              border-left: 4px solid #007aff;
+              margin-top: 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>プライバシーポリシー</h1>
+            <p>
+              「Gmail一括既読アプリ」（以下「本アプリ」）は、ユーザーのプライバシーを尊重し、個人データの保護に厳重に努めています。本ポリシーは、本アプリがGoogle
+              APIから取得するデータの取り扱いについて説明するものです。
+            </p>
+
+            <h2>1. 取得するデータと利用目的</h2>
+            <p>本アプリは、Google OAuth認証を通じて以下のスコープ（権限）を利用します：</p>
+            <ul>
+              <li><strong>https://www.googleapis.com/auth/gmail.modify</strong></li>
+            </ul>
+            <p>
+              この権限は、ユーザーの指示に基づき、Gmailの未読メールを検索し、それらを「既読」状態にする（UNREADラベルを削除する）という<strong>特定の機能を提供するためだけに</strong>使用されます。本アプリがメールの閲覧、作成、送信、または削除を行うことはありません。
+            </p>
+
+            <h2>2. データの保護と管理</h2>
+            <ul>
+              <li>
+                <strong>データの非蓄積:</strong>
+                本アプリは、ユーザーのメール本文、件名、連絡先リスト、その他の個人データを外部サーバーに収集・蓄積・送信することはありません。処理はメモリ上でのみ行われ、完了後に破棄されます。
+              </li>
+              <li>
+                <strong>認証情報の保護:</strong>
+                認証に使用されるリフレッシュトークンは、データベースに保存される際、AES-GCMなどの標準的な暗号化技術を用いて暗号化され、不正アクセスから保護されます。
+              </li>
+              <li>
+                <strong>第三者への共有:</strong>
+                本アプリがユーザーのデータを第三者に販売、共有、または広告目的で利用することは一切ありません。
+              </li>
+            </ul>
+
+            <h2>3. データの削除</h2>
+            <p>
+              ユーザーはアプリ内の「ログアウト」または「アカウント解除」機能を利用することで、サーバー上の認証情報をいつでも完全に削除することができます。
+            </p>
+
+            <h2>4. お問い合わせ</h2>
+            <p>
+              本ポリシーに関するご質問や、データの取り扱いに関するお問い合わせは、下記までご連絡ください。
+            </p>
+            <div class="contact-box">
+              <strong>連絡先:</strong>
+              <a href="mailto:system@tsushinryo.com">system@tsushinryo.com</a>
+            </div>
+
+            <div class="footer">
+              <p>更新日: 2026年6月18日</p>
+              <p>&copy; 2026 Gmail一括既読アプリ</p>
+            </div>
+          </div>
+        </body>
+      </html>`
+  );
 });
 
 export default app;

@@ -171,7 +171,11 @@ app.post('/v1/gmail/read-all', async (c) => {
   } while (pageToken);
 
   if (allMessageIds.length === 0) {
-    return c.json({ message: 'No unread messages' });
+    return c.json({
+      success: true,
+      processed_count: 0,
+      message: 'No unread messages'
+    });
   }
 
   // 5. batchModify (1,000件ずつ分割してリクエスト)

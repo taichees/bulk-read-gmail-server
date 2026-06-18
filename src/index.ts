@@ -226,6 +226,73 @@ app.post('/v1/auth/logout', async (c) => {
 });
 
 /**
+ * ⑥ アプリ紹介ページ（ルートパス）
+ */
+app.get('/', (c) => {
+  return c.html(
+    html`<!DOCTYPE html>
+      <html lang="ja">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Gmail一括既読アプリ</title>
+          <style>
+            body {
+              font-family:
+                -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+                sans-serif;
+              line-height: 1.6;
+              max-width: 800px;
+              margin: 40px auto;
+              padding: 0 20px;
+              color: #333;
+              background-color: #f4f7f9;
+            }
+            .container {
+              background: #fff;
+              padding: 40px;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+              text-align: center;
+            }
+            h1 {
+              color: #222;
+              margin-bottom: 20px;
+            }
+            p {
+              margin-bottom: 30px;
+              font-size: 1.1em;
+            }
+            .links {
+              margin-top: 20px;
+              border-top: 1px solid #eee;
+              padding-top: 20px;
+            }
+            a {
+              color: #007aff;
+              text-decoration: none;
+            }
+            a:hover {
+              text-decoration: underline;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Gmail一括既読アプリ</h1>
+            <p>
+              溜まってしまったGmailの未読メールを、ワンタップで一括して「既読」にするためのシンプルで強力なツールです。
+            </p>
+            <div class="links">
+              <a href="/privacy">プライバシーポリシー</a>
+            </div>
+          </div>
+        </body>
+      </html>`
+  );
+});
+
+/**
  * ⑤ プライバシーポリシー（Google審査用）
  */
 app.get('/privacy', (c) => {

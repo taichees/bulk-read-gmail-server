@@ -59,20 +59,24 @@ app.post('/v1/auth/callback', async (c) => {
     return c.json({ error: 'Google Auth Failed', google_error: tokens }, 400);
   }
 
-  // refresh_tokenの暗号化
-  const encryptedRT = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
+  // Googleは初回認証時（またはprompt=consent時）のみrefresh_tokenを返すため、
+  // 存在する場合のみ暗号化して更新データに含める。
+  const upsertData: any = {
+    user_id,
+    access_token: tokens.access_token,
+    expiry_date: Date.now() + tokens.expires_in * 1000,
+  };
+
+  if (tokens.refresh_token) {
+    upsertData.refresh_token = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
+  } else {
+    console.log(`No new refresh_token provided for user ${user_id}. Keeping existing one if it exists.`);
+  }
 
   // DB保存
-  const { error } = await getSupabase(env)
-    .from('user_tokens')
-    .upsert({
-      user_id,
-      access_token: tokens.access_token,
-      refresh_token: encryptedRT,
-      expiry_date: Date.now() + tokens.expires_in * 1000,
-    });
+  const { error: upsertError } = await getSupabase(env).from('user_tokens').upsert(upsertData);
 
-  if (error) return c.json({ error: error.message }, 500);
+  if (upsertError) return c.json({ error: upsertError.message }, 500);
   return c.json({ success: true });
 });
 
@@ -99,6 +103,11 @@ app.post('/v1/gmail/read-all', async (c) => {
     .single();
 
   if (dbError || !user) return c.json({ error: 'User not found' }, 404);
+
+  // refresh_tokenがDBに存在するかチェック
+  if (!user.refresh_token) {
+    return c.json({ error: 'Refresh token is missing. Please re-authenticate.' }, 401);
+  }
 
   // 2. access_tokenの更新
   const decryptedRT = await decrypt(user.refresh_token, env.ENCRYPTION_KEY);

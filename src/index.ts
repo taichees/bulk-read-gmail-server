@@ -235,6 +235,7 @@ app.get('/', (c) => {
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta name="google-site-verification" content="-XAmTvUVaxJ8H_DR0BSwk5l_PxM7GiaASAqgdcD7H_0" />
           <title>Gmail一括既読アプリ</title>
           <style>
             body {

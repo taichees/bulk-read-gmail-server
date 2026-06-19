@@ -122,7 +122,7 @@ app.post('/v1/gmail/read-all', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { user_id, limit } = body;
+  const { user_id, limit, client_id } = body;
   const env = c.env;
   const supabase = getSupabase(env);
 
@@ -142,15 +142,25 @@ app.post('/v1/gmail/read-all', async (c) => {
 
   // 2. access_tokenの更新
   const decryptedRT = await decrypt(user.refresh_token, env.ENCRYPTION_KEY);
+
+  const targetClientId = client_id || env.GOOGLE_CLIENT_ID;
+  const params: Record<string, string> = {
+    client_id: targetClientId,
+    refresh_token: decryptedRT,
+    grant_type: 'refresh_token',
+  };
+
+  // Only include client_secret if refreshing for the backend's default confidential client
+  if (targetClientId === env.GOOGLE_CLIENT_ID) {
+    if (env.GOOGLE_CLIENT_SECRET) {
+      params.client_secret = env.GOOGLE_CLIENT_SECRET;
+    }
+  }
+
   const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: decryptedRT,
-      grant_type: 'refresh_token',
-    }),
+    body: new URLSearchParams(params),
   });
 
   const newTokens: any = await refreshRes.json();

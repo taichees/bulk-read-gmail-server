@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { streamText } from 'hono/streaming';
 import { createClient } from '@supabase/supabase-js';
 import { encrypt, decrypt } from './crypto';
 import { Bindings } from './types';
@@ -122,7 +123,7 @@ app.post('/v1/gmail/read-all', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { user_id, limit, client_id } = body;
+  const { user_id, limit, client_id, stream } = body;
   const env = c.env;
   const supabase = getSupabase(env);
 
@@ -170,84 +171,177 @@ app.post('/v1/gmail/read-all', async (c) => {
   }
   const accessToken = newTokens.access_token;
 
-  // 3 & 4. 未読メールIDの取得 (Pagination対応)
-  let allMessageIds: string[] = [];
-  let pageToken: string | undefined = undefined;
+  if (stream) {
+    return streamText(c, async (writer) => {
+      // 3 & 4. 未読メールIDの取得 (Pagination対応)
+      let allMessageIds: string[] = [];
+      let pageToken: string | undefined = undefined;
 
-  do {
-    const listParams = new URLSearchParams({
-      q: 'is:unread',
-      maxResults: '500',
-    });
-    if (pageToken) listParams.append('pageToken', pageToken);
+      try {
+        do {
+          const listParams = new URLSearchParams({
+            q: 'is:unread',
+            maxResults: '500',
+          });
+          if (pageToken) listParams.append('pageToken', pageToken);
 
-    const listRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
+          const listRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
+
+          if (!listRes.ok) {
+            const errorText = await listRes.text();
+            await writer.writeln(
+              JSON.stringify({
+                type: 'error',
+                error: 'Failed to fetch messages from Gmail',
+                details: errorText,
+              })
+            );
+            return;
+          }
+
+          const listData: any = await listRes.json();
+          if (listData.messages) {
+            allMessageIds.push(...listData.messages.map((m: any) => m.id));
+          }
+
+          if (limit && allMessageIds.length >= limit) {
+            allMessageIds = allMessageIds.slice(0, limit);
+            break;
+          }
+
+          pageToken = listData.nextPageToken;
+        } while (pageToken);
+
+        await writer.writeln(JSON.stringify({ type: 'count', total: allMessageIds.length }));
+
+        if (allMessageIds.length === 0) {
+          await writer.writeln(
+            JSON.stringify({ type: 'result', success: true, processed_count: 0 })
+          );
+          return;
+        }
+
+        const chunkSize = 1000;
+        let completed = 0;
+        for (let i = 0; i < allMessageIds.length; i += chunkSize) {
+          const chunk = allMessageIds.slice(i, i + chunkSize);
+          const batchRes = await fetch(
+            'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                ids: chunk,
+                removeLabelIds: ['UNREAD'],
+              }),
+            }
+          );
+
+          if (!batchRes.ok) {
+            const errorText = await batchRes.text();
+            console.error('Gmail BatchModify Error:', errorText);
+          } else {
+            completed += chunk.length;
+          }
+          await writer.writeln(JSON.stringify({ type: 'progress', completed }));
+        }
+
+        await writer.writeln(
+          JSON.stringify({ type: 'result', success: true, processed_count: completed })
+        );
+      } catch (err: any) {
+        await writer.writeln(JSON.stringify({ type: 'error', error: err.message }));
       }
-    );
+    });
+  } else {
+    // 3 & 4. 未読メールIDの取得 (Pagination対応)
+    let allMessageIds: string[] = [];
+    let pageToken: string | undefined = undefined;
 
-    if (!listRes.ok) {
-      const errorText = await listRes.text();
-      console.error('Gmail List API Error:', { status: listRes.status, body: errorText });
-      return c.json(
-        { error: 'Failed to fetch messages from Gmail', details: errorText },
-        listRes.status
+    do {
+      const listParams = new URLSearchParams({
+        q: 'is:unread',
+        maxResults: '500',
+      });
+      if (pageToken) listParams.append('pageToken', pageToken);
+
+      const listRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
       );
+
+      if (!listRes.ok) {
+        const errorText = await listRes.text();
+        console.error('Gmail List API Error:', { status: listRes.status, body: errorText });
+        return c.json(
+          { error: 'Failed to fetch messages from Gmail', details: errorText },
+          listRes.status
+        );
+      }
+
+      const listData: any = await listRes.json();
+      if (listData.messages) {
+        allMessageIds.push(...listData.messages.map((m: any) => m.id));
+      }
+
+      if (limit && allMessageIds.length >= limit) {
+        allMessageIds = allMessageIds.slice(0, limit);
+        break;
+      }
+
+      pageToken = listData.nextPageToken;
+    } while (pageToken);
+
+    if (allMessageIds.length === 0) {
+      return c.json({
+        success: true,
+        processed_count: 0,
+        message: 'No unread messages',
+      });
     }
 
-    const listData: any = await listRes.json();
-    if (listData.messages) {
-      allMessageIds.push(...listData.messages.map((m: any) => m.id));
+    const chunkSize = 1000;
+    let completed = 0;
+    for (let i = 0; i < allMessageIds.length; i += chunkSize) {
+      const chunk = allMessageIds.slice(i, i + chunkSize);
+      const batchRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ids: chunk,
+            removeLabelIds: ['UNREAD'],
+          }),
+        }
+      );
+
+      if (!batchRes.ok) {
+        const errorText = await batchRes.text();
+        console.error('Gmail BatchModify Error:', errorText);
+      } else {
+        completed += chunk.length;
+      }
     }
 
-    // limitがある場合は制限
-    if (limit && allMessageIds.length >= limit) {
-      allMessageIds = allMessageIds.slice(0, limit);
-      break;
-    }
-
-    pageToken = listData.nextPageToken;
-  } while (pageToken);
-
-  if (allMessageIds.length === 0) {
     return c.json({
       success: true,
-      processed_count: 0,
-      message: 'No unread messages',
+      processed_count: completed,
     });
   }
-
-  // 5. batchModify (1,000件ずつ分割してリクエスト)
-  const chunkSize = 1000;
-  for (let i = 0; i < allMessageIds.length; i += chunkSize) {
-    const chunk = allMessageIds.slice(i, i + chunkSize);
-    const batchRes = await fetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ids: chunk,
-          removeLabelIds: ['UNREAD'],
-        }),
-      }
-    );
-
-    if (!batchRes.ok) {
-      const errorText = await batchRes.text();
-      console.error('Gmail BatchModify Error:', errorText);
-    }
-  }
-
-  return c.json({
-    success: true,
-    processed_count: allMessageIds.length,
-  });
 });
 
 /**

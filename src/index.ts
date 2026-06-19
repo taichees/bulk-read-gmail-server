@@ -21,32 +21,42 @@ app.post('/v1/auth/callback', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
-  const { code, user_id } = body;
+  const { code, user_id, client_id, redirect_uri } = body;
   const env = c.env;
 
   // 環境変数の検証
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.ENCRYPTION_KEY) {
-    console.error('Missing environment variables:', {
-      GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,
-      GOOGLE_CLIENT_SECRET: !!env.GOOGLE_CLIENT_SECRET,
+  const targetClientId = client_id || env.GOOGLE_CLIENT_ID;
+  const targetRedirectUri = redirect_uri || env.REDIRECT_URI || 'http://localhost:5173';
+
+  if (!targetClientId || !env.ENCRYPTION_KEY) {
+    console.error('Missing environment variables or parameters:', {
+      targetClientId: !!targetClientId,
       ENCRYPTION_KEY: !!env.ENCRYPTION_KEY,
     });
     return c.json({ error: 'Server configuration error' }, 500);
   }
 
-  // Google Token APIにリクエスト
-  const redirectUri = env.REDIRECT_URI || 'http://localhost:5173';
+  // Google Token APIにリクエスト用のパラメータを構築
+  const params: Record<string, string> = {
+    code,
+    client_id: targetClientId,
+    grant_type: 'authorization_code',
+    redirect_uri: targetRedirectUri,
+  };
+
+  // デフォルトのGOOGLE_CLIENT_IDと同じ場合（かつシークレットがある場合）のみclient_secretを付与
+  if (targetClientId === env.GOOGLE_CLIENT_ID) {
+    if (!env.GOOGLE_CLIENT_SECRET) {
+      console.error('Missing GOOGLE_CLIENT_SECRET for confidential client exchange');
+      return c.json({ error: 'Server configuration error' }, 500);
+    }
+    params.client_secret = env.GOOGLE_CLIENT_SECRET;
+  }
 
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
-    }),
+    body: new URLSearchParams(params),
   });
 
   const tokens: any = await tokenRes.json();
@@ -56,14 +66,32 @@ app.post('/v1/auth/callback', async (c) => {
       status: tokenRes.status,
       details: tokens,
     });
-    // Googleからのエラー内容を詳細に返すように変更
     return c.json({ error: 'Google Auth Failed', google_error: tokens }, 400);
+  }
+
+  // user_id がない場合は Google Userinfo API からメールアドレスを取得
+  let finalUserId = user_id;
+  if (!finalUserId) {
+    const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (userInfoRes.ok) {
+      const userInfo: any = await userInfoRes.json();
+      finalUserId = userInfo.email;
+    } else {
+      console.error('Failed to fetch userinfo from Google');
+      return c.json({ error: 'Failed to fetch user info from Google' }, 400);
+    }
+  }
+
+  if (!finalUserId) {
+    return c.json({ error: 'user_id is missing and could not be retrieved from Google' }, 400);
   }
 
   // Googleは初回認証時（またはprompt=consent時）のみrefresh_tokenを返すため、
   // 存在する場合のみ暗号化して更新データに含める。
   const upsertData: any = {
-    user_id,
+    user_id: finalUserId,
     access_token: tokens.access_token,
     expiry_date: Date.now() + tokens.expires_in * 1000,
   };
@@ -72,7 +100,7 @@ app.post('/v1/auth/callback', async (c) => {
     upsertData.refresh_token = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
   } else {
     console.log(
-      `No new refresh_token provided for user ${user_id}. Keeping existing one if it exists.`
+      `No new refresh_token provided for user ${finalUserId}. Keeping existing one if it exists.`
     );
   }
 
@@ -80,7 +108,7 @@ app.post('/v1/auth/callback', async (c) => {
   const { error: upsertError } = await getSupabase(env).from('user_tokens').upsert(upsertData);
 
   if (upsertError) return c.json({ error: upsertError.message }, 500);
-  return c.json({ success: true });
+  return c.json({ success: true, user_id: finalUserId });
 });
 
 /**
@@ -235,7 +263,10 @@ app.get('/', (c) => {
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <meta name="google-site-verification" content="-XAmTvUVaxJ8H_DR0BSwk5l_PxM7GiaASAqgdcD7H_0" />
+          <meta
+            name="google-site-verification"
+            content="-XAmTvUVaxJ8H_DR0BSwk5l_PxM7GiaASAqgdcD7H_0"
+          />
           <title>Gmail一括既読アプリ</title>
           <style>
             body {

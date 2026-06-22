@@ -1,15 +1,11 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { streamText } from 'hono/streaming';
-import { createClient } from '@supabase/supabase-js';
-import { encrypt, decrypt } from './crypto';
 import { Bindings } from './types';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Supabaseクライアント初期化
-const getSupabase = (env: Bindings) =>
-  createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+// Supabaseクライアント初期化は不要になりました
 
 /**
  * ② OAuth認証・コールバック
@@ -29,11 +25,8 @@ app.post('/v1/auth/callback', async (c) => {
   const targetClientId = client_id || env.GOOGLE_CLIENT_ID;
   const targetRedirectUri = redirect_uri || env.REDIRECT_URI || 'http://localhost:5173';
 
-  if (!targetClientId || !env.ENCRYPTION_KEY) {
-    console.error('Missing environment variables or parameters:', {
-      targetClientId: !!targetClientId,
-      ENCRYPTION_KEY: !!env.ENCRYPTION_KEY,
-    });
+  if (!targetClientId) {
+    console.error('Missing environment variables or parameters: targetClientId');
     return c.json({ error: 'Server configuration error' }, 500);
   }
 
@@ -89,27 +82,13 @@ app.post('/v1/auth/callback', async (c) => {
     return c.json({ error: 'user_id is missing and could not be retrieved from Google' }, 400);
   }
 
-  // Googleは初回認証時（またはprompt=consent時）のみrefresh_tokenを返すため、
-  // 存在する場合のみ暗号化して更新データに含める。
-  const upsertData: any = {
+  return c.json({
+    success: true,
     user_id: finalUserId,
     access_token: tokens.access_token,
-    expiry_date: Date.now() + tokens.expires_in * 1000,
-  };
-
-  if (tokens.refresh_token) {
-    upsertData.refresh_token = await encrypt(tokens.refresh_token, env.ENCRYPTION_KEY);
-  } else {
-    console.log(
-      `No new refresh_token provided for user ${finalUserId}. Keeping existing one if it exists.`
-    );
-  }
-
-  // DB保存
-  const { error: upsertError } = await getSupabase(env).from('user_tokens').upsert(upsertData);
-
-  if (upsertError) return c.json({ error: upsertError.message }, 500);
-  return c.json({ success: true, user_id: finalUserId });
+    refresh_token: tokens.refresh_token,
+    expires_in: tokens.expires_in,
+  });
 });
 
 /**
@@ -120,56 +99,21 @@ app.post('/v1/gmail/read-all', async (c) => {
   try {
     body = await c.req.json();
   } catch (e) {
-    return c.json({ error: 'Invalid JSON' }, 400);
+    body = {};
   }
 
-  const { user_id, limit, client_id, stream } = body;
-  const env = c.env;
-  const supabase = getSupabase(env);
+  const { limit, stream } = body;
 
-  // 1. DBから情報を取得
-  const { data: user, error: dbError } = await supabase
-    .from('user_tokens')
-    .select('*')
-    .eq('user_id', user_id)
-    .single();
-
-  if (dbError || !user) return c.json({ error: 'User not found' }, 404);
-
-  // refresh_tokenがDBに存在するかチェック
-  if (!user.refresh_token) {
-    return c.json({ error: 'Refresh token is missing. Please re-authenticate.' }, 401);
+  // Authorizationヘッダーからアクセストークンを取得
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized: Missing or invalid token' }, 401);
   }
+  const accessToken = authHeader.substring(7).trim();
 
-  // 2. access_tokenの更新
-  const decryptedRT = await decrypt(user.refresh_token, env.ENCRYPTION_KEY);
-
-  const targetClientId = client_id || env.GOOGLE_CLIENT_ID;
-  const params: Record<string, string> = {
-    client_id: targetClientId,
-    refresh_token: decryptedRT,
-    grant_type: 'refresh_token',
-  };
-
-  // Only include client_secret if refreshing for the backend's default confidential client
-  if (targetClientId === env.GOOGLE_CLIENT_ID) {
-    if (env.GOOGLE_CLIENT_SECRET) {
-      params.client_secret = env.GOOGLE_CLIENT_SECRET;
-    }
+  if (!accessToken) {
+    return c.json({ error: 'Unauthorized: Empty token' }, 401);
   }
-
-  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params),
-  });
-
-  const newTokens: any = await refreshRes.json();
-  if (!refreshRes.ok) {
-    console.error('Token Refresh Error:', newTokens);
-    return c.json({ error: 'Failed to refresh access token' }, 401);
-  }
-  const accessToken = newTokens.access_token;
 
   if (stream) {
     return streamText(c, async (writer) => {
@@ -348,12 +292,8 @@ app.post('/v1/gmail/read-all', async (c) => {
  * ④ アカウント初期化（ログアウト）
  */
 app.post('/v1/auth/logout', async (c) => {
-  const { user_id } = await c.req.json();
-  const supabase = getSupabase(c.env);
-
-  const { error } = await supabase.from('user_tokens').delete().eq('user_id', user_id);
-
-  if (error) return c.json({ error: error.message }, 500);
+  // クライアントサイド移行に伴い、サーバー側でのログアウト処理（DB削除）は不要になりました。
+  // 互換性維持のため、常に成功を返します。
   return c.json({ success: true });
 });
 

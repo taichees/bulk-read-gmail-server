@@ -408,6 +408,16 @@ app.get('/privacy', (c) => {
               margin-top: 30px;
               font-size: 1.4em;
             }
+            h3 {
+              color: #222;
+              margin-top: 30px;
+              font-size: 1.3em;
+            }
+            h4 {
+              color: #444;
+              margin-top: 20px;
+              font-size: 1.1em;
+            }
             p,
             li {
               margin-bottom: 15px;
@@ -437,6 +447,73 @@ app.get('/privacy', (c) => {
               「Gmail一括既読アプリ」（以下「本アプリ」）は、ユーザーのプライバシーを尊重し、個人データの保護に厳重に努めています。本ポリシーは、本アプリがGoogle
               APIから取得するデータの取り扱いについて説明するものです。
             </p>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+
+            <h3>
+              Google APIサービスユーザーデータポリシーへの準拠について / Google API Services User
+              Data Policy Compliance
+            </h3>
+            <p>
+              当アプリ「Gmail一括既読アプリ（以下「本アプリ」）」は、ユーザーの同意のもと、Google
+              APIから受信した情報を使用および他アプリへ転送します。その際、本アプリは、限定用途（Limited
+              Use）の要件を含め、<a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                >Google API Services User Data Policy</a
+              >に完全に準拠します。
+            </p>
+            <p>
+              Our application "Gmail一括既読アプリ" (hereinafter referred to as "the App") uses and
+              transfers information received from Google APIs to any other app in full compliance
+              with the
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                >Google API Services User Data Policy</a
+              >, including the Limited Use requirements.
+            </p>
+
+            <h4>データの限定用途（Limited Use）に関する誓約 / Limited Use Commitments</h4>
+            <ul>
+              <li>
+                <strong>ユーザー機能の提供と向上:</strong> Google API（Gmail
+                API）から取得したデータは、本アプリのユーザーインターフェース上で明確に提供されている機能（Gmailの一括既読化、未読件数の通知、バッジ表示など）の提供および改善の目的にのみ使用されます。<br />
+                <strong>Providing and Improving User-Facing Features:</strong> Data obtained through
+                Google APIs will be used solely to provide or improve user-facing features that are
+                prominent in the App's user interface.
+              </li>
+              <li>
+                <strong>広告利用の禁止:</strong>
+                取得したGoogleユーザーデータを、行動ターゲティング広告、パーソナライズされた広告、または関心連動型広告を含む、いかなる広告の配信・提供のためにも使用または転送しません。<br />
+                <strong>No Advertising:</strong> We do not use or transfer Google user data for
+                serving advertisements, including retargeting, personalized, or interest-based
+                advertising.
+              </li>
+              <li>
+                <strong>第三者への転送・売却の禁止:</strong>
+                法的義務の遵守やセキュリティ上の理由、またはユーザーが明示的に同意した機能の提供に必要な場合を除き、取得したデータを第三者に共有または売却しません。<br />
+                <strong>No Data Sale or Transfer:</strong> We do not sell or transfer Google user
+                data to third parties, except as necessary to provide or improve prominent
+                user-facing features, comply with applicable law, or for security purposes.
+              </li>
+              <li>
+                <strong>AI・機械学習モデルのトレーニング禁止:</strong>
+                取得したGoogleユーザーデータを、一般的なAI（人工知能）や機械学習（ML）モデル、大規模言語モデル（LLM）のトレーニングや学習のために使用または転送しません。<br />
+                <strong>No AI/ML Training:</strong> We do not use or transfer Google user data to
+                train non-personalized artificial intelligence (AI) and/or machine learning (ML)
+                models.
+              </li>
+              <li>
+                <strong>人間によるアクセスの制限:</strong>
+                セキュリティ上の理由、法的要請、または不具合調査のためにユーザーから明確な同意を得た場合を除き、人間がユーザーのGoogleデータ（メール内容など）を直接閲覧することはありません。<br />
+                <strong>Human Access Restricted:</strong> We do not allow humans to read Google user
+                data unless we have obtained the user's affirmative agreement for specific messages,
+                for security purposes, or to comply with applicable law.
+              </li>
+            </ul>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
 
             <h2>1. 取得するデータと利用目的</h2>
             <p>本アプリは、Google OAuth認証を通じて以下のスコープ（権限）を利用します：</p>
@@ -478,7 +555,7 @@ app.get('/privacy', (c) => {
             </div>
 
             <div class="footer">
-              <p>更新日: 2026年6月22日</p>
+              <p>更新日: 2026年6月26日</p>
               <p>&copy; 2026 Gmail一括既読アプリ</p>
             </div>
           </div>
